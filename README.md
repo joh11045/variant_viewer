@@ -8,6 +8,9 @@ Table is obtained through annotation and filtering. Filtering scheme is present 
 
 annotation was command line
 
+
+ensembl-vep/./vep -i ensembl-vep/inputs/allfam.vcf -o vep_anno.tsv --cache  --everything --dir_cache $HOME/cache "exact" --tab
+
 ensembl-vep/./vep -i ensembl-vep/inputs/allfam.vcf -o vep_anno.vcf --cache  --everything --dir_cache $HOME/cache "exact" --vcf
 
 ## bystro annotation
