@@ -16,3 +16,12 @@ ensembl-vep/./vep -i ensembl-vep/inputs/allfam.vcf -o vep_anno.vcf --cache  --ev
 ## bystro annotation
 
 bystro annotation used website
+
+## Filtering VEP annotation
+
+VEP data is filtered and cleaned using the script vep_clean
+
+## Filtering bystro Data
+
+Script annotation.r is depreciated as project is pivoting to VEP;
+
