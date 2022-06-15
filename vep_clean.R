@@ -15,7 +15,7 @@ library(VariantAnnotation)
 
 #file<-"~/vep_anno.vcf"
 
-file<-"ensembl-vep/outputs/allfamhg37.vcf"
+file<-"ensembl-vep/outputs/final_allfam.vcf"
 
 ## use functions from Variant Annotation Package to load VCF data in order to use
 ## functions from ensemblVEP package
@@ -31,7 +31,7 @@ csq<-as.data.frame(cbind(trial.2@ranges@NAMES,trial.2@elementMetadata)) %>%
 rm(trial,trial.2)
 
 #saveRDS(csq,"temp.rds")
-#csq<-readRDS("temp.rds")
+csq<-readRDS("temp.rds")
 
 ## Read in the same VCF file again but to identify actual alleles at each location and QUAL
 allfam<-read.vcfR(file)
@@ -88,8 +88,30 @@ filtered_df<-merged_df%>%
   filter(as.numeric(PolyPhen.2>0.9)|is.na(PolyPhen)) %>% 
   filter(!is.na(BIOTYPE),!is.na(Consequence)) %>%
   filter(!is.na(`2002145`)) %>% 
-  filter(IMPACT=="HIGH"|IMPACT=="MODERATE") %>% 
+  filter((IMPACT=="HIGH"|IMPACT=="MODERATE")|
+  (IMPACT=="MODIFIER"&Consequence%in%c("coding_sequence_variant",
+                                       "coding_sequence_variant&feature_elongation","coding_sequence_variant&3_prime_UTR_variant",
+                                       "coding_sequence_variant&5_prime_UTR_variant","coding_sequence_variant&feature_elongation")&BIOTYPE=="protein_coding")|
+   IMPACT=="LOW"&Consequence!="synonymous_variant"&BIOTYPE=="protein_coding") %>% 
   mutate_all(as.character)
+
+# merged_df%>%separate(PolyPhen,into = c("PolyPhen.1","PolyPhen.2"),sep = "[(]", remove = F) %>% 
+#   mutate(PolyPhen.2=str_sub(PolyPhen.2,start = 1,-2)) %>% dplyr::select(-PolyPhen.1) %>% 
+#   separate(SIFT,into = c("SIFT.1","SIFT.2"),sep = "[(]", remove = F) %>% 
+#   mutate(SIFT.2=str_sub(SIFT.2,start = 1,-2)) %>% dplyr::select(-SIFT.1) %>% 
+#   filter(as.numeric(AF<0.01)|is.na(AF)) %>% 
+#   filter(as.numeric(QUAL)>20|is.na(QUAL)) %>% filter(as.numeric(SIFT.2<0.1)|is.na(SIFT)) %>% 
+#   filter(as.numeric(PolyPhen.2>0.9)|is.na(PolyPhen)) %>% 
+#   filter(!is.na(BIOTYPE),!is.na(Consequence)) %>%
+#   filter(!is.na(`2002145`)) %>% 
+#   filter(IMPACT!="LOW") %>%
+#   filter(Consequence!="downstream_gene_variant",Consequence!="upstream_gene_variant",
+#          Consequence!="non_coding_transcript_exon_variant",Consequence!="non_coding_transcript_variant",
+#          Consequence!="intron_variant&non_coding_transcript_variant",Consequence!="intron_variant",
+#          Consequence!="3_prime_UTR_variant",Consequence!="5_prime_UTR_variant",
+#          Consequence!="intron_variant&NMD_transcript_variant")->y
+# %>%
+# merged_df %>%   group_by(Consequence,BIOTYPE,IMPACT) %>% tally()->x
 
 filtered_df[is.na(filtered_df)]<-"!"
 
@@ -110,14 +132,20 @@ for(i in 1:nrow(frame_1)){
 }
 rm(chrom_cross,filtered_df,frame_2,merged_df,i,j,k)
 
-col_order<-c("chr","ref","ID","ref","alt","QUAL","cDNA","refSeq.refAminoAcid","refSeq.altAminoAcid","refSeq.codonNumber",
-             "gene","hgnc.gene.description","Mother","Father","Proband",
-             "pubmed_links","omim_link",
-             "phastCons","phyloP","cadd","gnomad.genomes.af","gnomad_links",
-             "refSeq.nearest.name",
-             "refSeq.siteType","refSeq.exonicAlleleFunction",
-             "clinvar.alleleID","clinvar.clinicalSignificance","clinvar.type",
-             "clinvar.phenotypeList","clinvar.numberSubmitters","clinvar.origin", 
-             "clinvar.referenceAllele","clinvar.alternateAllele","clinvar.reviewStatus",        
-             "refSeq.clinvar.clinicalSignificance","refSeq.clinvar.type","refSeq.clinvar.phenotypeList",                
-             "refSeq.clinvar.numberSubmitters","refSeq.clinvar.origin","refSeq.clinvar.reviewStatus","refSeq.description","HGMD_link","genecard_links","db_best_guess")
+final_table<-frame_1 %>% dplyr::select(chr, pos, ref, alt, QUAL, Alleles=gt_GT_alleles, `HGVS Simple`=HGVSc, `HGVS Protien`=HGVSp,Proband=`2002145`, Mother=`2002155`, Father=`2002161`,
+                   Consequence, BIOTYPE, IMPACT, SYMBOL, Gene, Feature, Feature_type, EXON, INTRON, HGVSc, HGVSp, cDNA_position,
+                   CDS_position, Protein_position, Amino_acids, Codons, Existing_variation, DISTANCE, STRAND,     
+                   FLAGS, VARIANT_CLASS, SYMBOL_SOURCE, HGNC_ID, CANONICAL, MANE_SELECT, MANE_PLUS_CLINICAL,  
+                   TSL, APPRIS, CCDS, ENSP, SWISSPROT, TREMBL, UNIPARC, UNIPROT_ISOFORM, GENE_PHENO,
+                   SIFT, PolyPhen, DOMAINS, miRNA, AF,
+                   gnomAD_AF, MAX_AF, MAX_AF_POPS, CLIN_SIG,             
+                   SOMATIC, PHENO, PUBMED, MOTIF_NAME, MOTIF_POS, HIGH_INF_POS, MOTIF_SCORE_CHANGE,
+                   TRANSCRIPTION_FACTORS)
+saveRDS(final_table,"Variant_viewer/vep_table.rds")
+
+#x<-read_rds("Variant_viewer/vep_table.rds")
+#x[1,] %>% gather(value,variable) %>% write.csv("Variant_viewer/vep_data_dict.csv",row.names = F)
+
+#final_table %>% dplyr::select(chr,pos) -> x
+
+#write_tsv(x,file = "ft_positions.txt")
