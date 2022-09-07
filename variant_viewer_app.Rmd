@@ -1,0 +1,225 @@
+---
+title: "Variant Viewer Project"
+author: "Kevin Johnson"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    css: style.css
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(shiny)
+library(tidyverse)
+library(igvShiny)
+library(GenomicAlignments)
+library(VariantAnnotation)
+library(bedr)
+```
+
+<style type="text/css">
+.main-container {
+  max-width: 95% !important;
+  margin: auto;
+}
+.shiny-frame{
+  width: 1800px;
+  height: 600px;
+}
+</style>
+
+## Variant Viewer
+
+* This web app includes an IGV viewing instance and a table of possibly pathogenic variants
+* Click a variant entry in the table to focus the viewer on that genomic region
+* Control additional columns of information shown in the table or the genomic information displayed with control buttons
+
+```{r}
+loc_1<-reactiveValues(chrom=NULL, pos=NULL)
+#vcf_file<-"~/ensembl-vep/outputs/final_allfam.vcf"
+vcf_file<-"~/ensembl-vep/inputs/newfam2.vcf"
+# x.1<-read.vcf(vcf_file)
+# x.2<-bed2vcf(x.1)
+#vep_table <- readRDS("~/Variant_viewer/vep_table.rds")
+vep_table<-read.csv("~/family_18712.csv")
+bed<-vep_table %>% dplyr::select(chrom=chr,pos,ref,alt,Alleles,Proband,Mother,Father,Sibling) %>% mutate(start=as.numeric(pos)-1,end=as.numeric(pos)+nchar(alt)-1) %>% 
+  dplyr::select(chrom, start,end,Proband,Mother,Father,Sibling)
+bed.father<-bed %>% filter(Father!="!")
+bed.mother<-bed %>% filter(Mother!="!")
+bed.sib<-bed %>% filter(Sibling!="!")
+onload<-reactiveValues(x=TRUE)
+```
+
+
+```{r}
+if(!dir.exists("tracks"))
+    dir.create("tracks")
+addResourcePath("tracks", "tracks")
+#-------------------------------------------------------------------------------
+f <- system.file(package="igvShiny")
+stopifnot(file.exists(f))
+printf <- function(...) print(noquote(sprintf(...)))
+ui<-fluidPage(
+    titlePanel("IGV Instance"),
+    
+    # Create a new row for the table.
+                   mainPanel(
+                     fluidRow(
+                         textOutput("Description"),
+                     actionButton("addLocalVCFTrackButton", "Add VCF Trio"),
+                     actionButton("addLocalBEDTrackButton1","Add Children BED"),
+                     actionButton("addLocalBEDTrackButton2","Add Parents BED"),
+                     actionButton("removeUserTracksButton", "Remove User Tracks"),
+                     igvShinyOutput('igvShiny_1'),
+                     width=40)))
+            
+# Define server logic required to create DT
+#-------------------------------------------------------------------------------
+server <- function(input, output, session) {
+     observeEvent(input$addLocalVCFTrackButton, { 
+        vcf_1<-readVcf(vcf_file,"hg19")
+        loadVcfTrack(session,id="igvShiny_1",trackName = "Trio VCF",vcfData=vcf_1)
+    })
+      observeEvent(input$addLocalBEDTrackButton1, {
+        loadBedTrack(session, id=containerID, trackName="Proband", tbl=bed, color="red") 
+        #loadBedTrack(session, id=containerID, trackName="Sibling", tbl=bed.sib, color="brown")
+      })    
+      observeEvent(input$addLocalBEDTrackButton2, {
+        loadBedTrack(session, id=containerID, trackName="Mother", tbl=bed.mother, color="green")
+        loadBedTrack(session, id=containerID, trackName="Father", tbl=bed.father, color="teal")
+      })
+    
+      observeEvent(input$removeUserTracksButton, {
+        printf("---- removeUserTracks")
+        removeUserAddedTracks(session,id="igvShiny_1")
+    })
+      
+    observe({onload$x
+      loadBedTrack(session,id="igvShiny_1",trackName = "Family",tbl=bed)
+                 })
+    
+    output$igvShiny_1<-renderIgvShiny(igvShiny(list(genomeName="hg19",initialLocus="chr1:1-50000")))
+    
+    observeEvent(input$igvReady, {
+      containerID <- input$igvReady
+      printf("igv ready, %s", containerID)
+      loadBedTrack(session, id=containerID, trackName="Proband", tbl=bed, color="red")
+      loadBedTrack(session, id=containerID, trackName="Mother", tbl=bed.mother, color="green")
+      loadBedTrack(session, id=containerID, trackName="Father", tbl=bed.father, color="teal")
+      loadBedTrack(session, id=containerID, trackName="Sibling", tbl=bed.sib, color="brown")
+      ;
+    })
+    
+  
+    observe({
+      input$loc_1
+      showGenomicRegion(session,id="igvShiny_1",loc_1$locus)
+    })
+}
+
+shinyApp(ui,server)
+options = list(height=2000, width="200%")
+
+```
+
+## Variant Table
+The table below gives information about the variants present. Displayed variants have been filtered according to the filtering scheme described below. There are over 50 columns of information about each variant. Columns are grouped by similar themes and additional information can be toggled using the check boxes.  
+
+
+```{r}
+ui2<-fluidPage(
+                mainPanel(column(3,
+                  fluidRow(titlePanel("Variables to Add"),
+                          checkboxInput("variable1", "Trio Status",FALSE),
+                          checkboxInput("variable11","Display Variant Information (HGVS)",FALSE),
+                          checkboxInput("variable2", "Display Variant Type and Impact information",FALSE),
+                          checkboxInput("variable3", "Display Additional Variant Location Information",FALSE),
+                          checkboxInput("variable4", "Display Allele Frequency and Pathogenicity Information",FALSE),
+                          checkboxInput("variable5", "Display Additional Information",FALSE),
+                          checkboxInput("variable6", "Display Links",FALSE)),
+                  
+                ),column(6,
+                  fluidRow(titlePanel("Variables to Filter"),
+                           checkboxGroupInput("filter_1","Filter Father by Status:",base::unique(bed$Father),selected = base::unique(bed$Father)),
+                           checkboxGroupInput("filter_2","Filter Mother by Status:",base::unique(bed$Mother),selected = base::unique(bed$Mother)))),
+                  column(3,
+                         fluidRow(titlePanel("Variables to Filter"),
+                           checkboxGroupInput("filter_3","Filter Proband by Status:",base::unique(bed$Proband),selected = base::unique(bed$Proband)),
+                           checkboxGroupInput("filter_4","Filter sbiling by Status:",base::unique(bed$Sibling),selected = base::unique(bed$Sibling)))
+
+                ),
+                  fluidRow(DT::dataTableOutput("variant_table")))
+)
+
+
+server2<-function(input,output,session){
+   observeEvent(input$variant_table_rows_selected, {
+        loc_1$locus<-paste(variants[input$variant_table_rows_selected,1],variants[input$variant_table_rows_selected,2],sep = ":")
+          })
+   #variants<-read_csv("pathogenic_variants_report.csv")
+    variants<-vep_table
+    dictionary<-read_csv("Data_Dictionary.csv",na = character())
+    ID<-names(variants)[1:5]
+    varaint_info<-names(variants)[6:8]
+    trio<-names(variants)[9:12]
+    feature<-names(variants)[c(12:15,17:18,30)]
+    positional<-names(variants[c(19:29)])
+    algos<-names(variants)[c(45:55)]
+    the_rest<-names(variants)[c(31:44,56:57)]
+    links<-names(variants)[c(58:63)]
+    var_table<-reactive({x<-ID
+        if(input$variable1==T){x<-append(x,trio)}
+        if(input$variable11==T){x<-append(x,varaint_info)}
+        if(input$variable2==T){x<-append(x,feature)}
+        if(input$variable3==T){x<-append(x,positional)}
+        if(input$variable4==T){x<-append(x,algos)}
+        if(input$variable5==T){x<-append(x,the_rest)}
+        if(input$variable6==T){x<-append(x,links)}
+        as.data.frame(variants[variants$Sibling%in%c(input$filter_4)&variants$Proband%in%c(input$filter_3)&variants$Mother%in%c(input$filter_2)&variants$Father%in%c(input$filter_1),x])
+        })
+    
+    output$variant_table<-DT::renderDataTable(DT::datatable(data = var_table(),rownames = F,selection = "single",options = list(pageLength=5)))
+  
+}
+shinyApp(ui2,server2)
+
+```
+
+
+
+
+```{r}
+ui3<-fluidPage(
+  titlePanel("About"),
+  tabsetPanel(
+    tabPanel("Data Dictionary",
+             fluidRow(DT::dataTableOutput("data_dict"))),
+    tabPanel("Data Processing Plan",
+             fluidRow(imageOutput("About_img"))),
+    tabPanel("VEP Annotation Output",
+             fluidRow(includeHTML('~/ensembl-vep/outputs/final_allfam.vcf_summary.html'))
+    
+  )
+)
+)
+server3<-function(input, output, session){
+      dictionary<-read_csv("~/Variant_viewer/vep_data_dict.csv",na = character())
+      output$data_dict<-DT::renderDataTable(DT::datatable(data=dictionary))
+      
+       output$About_img<-renderImage({
+        filename<-"data_filter.jpg"
+        list(src=filename,
+             alt="Data pipeline")},
+        deleteFile=FALSE
+    )
+}
+
+
+shinyApp(ui3, server3)
+```
+
+
+
+	
+
