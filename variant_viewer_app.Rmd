@@ -45,8 +45,8 @@ vcf_file<-"~/ensembl-vep/inputs/newfam2.vcf"
 #vep_table <- readRDS("~/Variant_viewer/vep_table.rds")
 #vep_table<-read.csv("~/family_18712.csv")
 vep_table<-read.csv("~/2022-09-07_vep_family_18712.csv")
-bed<-vep_table %>% dplyr::select(chrom=chr,pos,ref,alt,Alleles,Proband,Mother,Father,Sibling) %>% mutate(start=as.numeric(pos)-1,end=as.numeric(pos)+nchar(alt)-1) %>% 
-  dplyr::select(chrom, start,end,Proband,Mother,Father,Sibling)
+bed<-vep_table %>% dplyr::select(chr,pos,ref,alt,Proband,Mother,Father,Sibling) %>% mutate(start=as.numeric(pos)-1,end=as.numeric(pos)+nchar(alt)-1) %>% 
+  dplyr::select(chr, start,end,Proband,Mother,Father,Sibling)
 bed.father<-bed %>% filter(Father!="!")
 bed.mother<-bed %>% filter(Mother!="!")
 bed.sib<-bed %>% filter(Sibling!="!")
@@ -163,13 +163,13 @@ server2<-function(input,output,session){
     variants<-vep_table
     dictionary<-read_csv("Data_Dictionary.csv",na = character())
     ID<-names(variants)[1:5]
-    varaint_info<-names(variants)[6:8]
-    trio<-names(variants)[9:12]
-    feature<-names(variants)[c(12:15,17:18,30)]
-    positional<-names(variants[c(19:29)])
-    algos<-names(variants)[c(45:55)]
-    the_rest<-names(variants)[c(31:44,56:57)]
-    links<-names(variants)[c(58:63)]
+    varaint_info<-names(variants)[c(6,11,19:23)]
+    trio<-names(variants)[7:10]
+    feature<-names(variants)[c(24:25,35)]
+    positional<-names(variants[c(12,26:33)])
+    algos<-names(variants)[c(13:18)]
+    the_rest<-names(variants)[c(34,36:55)]
+    links<-names(variants)[c(56:61)]
     var_table<-reactive({x<-ID
         if(input$variable1==T){x<-append(x,trio)}
         if(input$variable11==T){x<-append(x,varaint_info)}
