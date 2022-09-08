@@ -130,7 +130,7 @@ The table below gives information about the variants present. Displayed variants
 
 ```{r}
 ui2<-fluidPage(
-                mainPanel(
+                mainPanel(column(3,
                   fluidRow(titlePanel("Variables to Add"),
                           checkboxInput("variable1", "Trio Status",FALSE),
                           checkboxInput("variable11","Display Variant Information (HGVS)",FALSE),
@@ -140,6 +140,16 @@ ui2<-fluidPage(
                           checkboxInput("variable5", "Display Additional Information",FALSE),
                           checkboxInput("variable6", "Display Links",FALSE)),
                   
+                ),column(6,
+                  fluidRow(titlePanel("Variables to Filter"),
+                           checkboxGroupInput("filter_1","Filter Father by Status:",base::unique(bed$Father),selected = base::unique(bed$Father)),
+                           checkboxGroupInput("filter_2","Filter Mother by Status:",base::unique(bed$Mother),selected = base::unique(bed$Mother)))),
+                  column(3,
+                         fluidRow(titlePanel("Variables to Filter"),
+                           checkboxGroupInput("filter_3","Filter Proband by Status:",base::unique(bed$Proband),selected = base::unique(bed$Proband)),
+                           checkboxGroupInput("filter_4","Filter sbiling by Status:",base::unique(bed$Sibling),selected = base::unique(bed$Sibling)))
+
+                ),
                   fluidRow(DT::dataTableOutput("variant_table")))
 )
 
