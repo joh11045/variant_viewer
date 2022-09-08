@@ -1,8 +1,10 @@
-# variant_viewer
-Code for the development of a pathogenic variant viewer app
-Variant viewer app displays table of possibly pathogenic variants and an IGV instance
+## APP
+Main app is variant_viewer_app.Rmd
+includes newer feature allowing to filter by family variant status. Older app also included without that functionality
 
-Table is obtained through annotation and filtering. Filtering scheme is present in annotations.r
+mardown_app.Rmd
+
+both apps need files to be set to work properly
 
 ## VEP annotation
 
@@ -23,5 +25,5 @@ VEP data is filtered and cleaned using the script vep_clean
 
 ## Filtering bystro Data
 
-Script annotation.r is depreciated as project is pivoting to VEP;
+Script annotation.r or bystro_newfam2_annotation
 
