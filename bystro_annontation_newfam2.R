@@ -1,7 +1,8 @@
+#script for cleaning and filtering bystro data
+#used for new family; script copied from annotations.R 
+#===============================================================================
 pacman::p_unload(pacman::p_loaded(), character.only = TRUE)
 library(tidyverse)
-
-
 library(openxlsx)
 library(stringr)
 library(vcfR)
@@ -198,6 +199,15 @@ write.csv(output_pathogenic,file = file_n,quote = F,row.names = F)
 
 
 
+output_pathogenic %>% inner_join(vep,by="key")
+
+
+vep$key<-paste(vep$chr,vep$pos)
+output_pathogenic$key<-paste(output_pathogenic$chr,output_pathogenic$pos)
+
+
+
+vep<-X2022_09_07_vep_family_18712
 
 
 
@@ -207,14 +217,42 @@ write.csv(output_pathogenic,file = file_n,quote = F,row.names = F)
 
 
 
+merged_df$BIOTYPE %>% table()
+merged_df$Consequence %>%str_split("[&]") %>% unlist() %>%  table()
+annotation_46$refSeq.siteType %>% str_split("[|;]") %>% unlist() %>% table()
+annotation_46$refSeq.exonicAlleleFunction %>% str_split("[|;]") %>% unlist() %>% table()
 
 
+x<-unique(paste(merged_df$chr,merged_df$pos,sep = ":"))
+y<-unique(paste(annotation_46$chrom,annotation_46$pos,sep = ":")) 
 
+prop.table(table(x%in%y))
+prop.table(table(y%in%x))
 
+xx<-unique(paste(filtered_df$chr,filtered_df$pos,sep = ":"))
+yy<-unique(paste(pathogenic$chrom,pathogenic$pos,sep = ":")) 
 
+prop.table(table(xx%in%yy))
+prop.table(table(yy%in%xx))
 
+prop.table(table(xx%in%y))
+prop.table(table(yy%in%x))
 
+pathogenic$key<-paste(pathogenic$chrom,pathogenic$pos,sep = ":")
+merged_df$key<-paste(merged_df$chr,merged_df$pos,sep = ":")
 
+annotation_46$key<-paste(annotation_46$chrom,annotation_46$pos,sep = ":")
+
+zz<-annotation_46 %>% filter(allele_func==T,site_type==T) %>% select(key,refSeq.siteType,refSeq.exonicAlleleFunction,ref,alt) %>% inner_join(merged_df %>% select(key,BIOTYPE,Consequence,ref,alt))
+
+zzz<-zz %>% group_by(Consequence,BIOTYPE) %>% tally()
+
+filtered_df$key<-paste(filtered_df$chr,filtered_df$pos,sep = ":")
+
+z<-pathogenic %>% select(key,refSeq.siteType,refSeq.exonicAlleleFunction,ref,alt) %>% inner_join(merged_df %>% select(key,BIOTYPE,Consequence,ref,alt))
+
+zz<-merged_df %>% filter(key%in%yy) %>% anti_join(filtered_df,by="key")
+xxx<-pathogenic %>% filter(key%in%x) %>% anti_join(filtered_df,by="key")
 
 
 

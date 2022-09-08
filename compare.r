@@ -1,3 +1,5 @@
+# Script for comparing output between VEP and bystro filtering
+# not part of typlical workflow
 library(tidyverse)
 
 bystro<-read.table("2022-08-31_b_annotation.bed",header = T)
@@ -20,17 +22,15 @@ xx<-sapply(bystro$gene, function(x){
 yy<-sapply(vep$SYMBOL, function(x){
   any(grepl(x,bystro$gene))
 })
-summary(grepl(bystro$ID%in%vep$Existing_variation))
+summary(bystro$ID%in%vep$Existing_variation)
 summary(vep$Existing_variation%in%bystro$ID)
-x$in_vep<-as.numeric((x$gene%in%vep$SYMBOL)|(base::paste(x$chrom,x$chromStart)%in%base::paste(vep$chr,vep$pos)))
 
-bystro$in_vep %>% summary.factor()
 
 cadidates<-bystro %>%  
   group_by(gene) %>% tally() #%>% 
   left_join(bystro) %>% filter(Proband=="Heterozygote",sibling!="Not.Present",(Mother=="Not.Present"|Father=="Not.Present")) %>% filter(n>1)
 
-  write.csv(x,"8_10_candidates_bystro.csv",row.names = F)
+#  write.csv(x,"8_10_candidates_bystro.csv",row.names = F)
 
 x<-bystro %>% filter(Proband=="Heterozygote",sibling!="Not.Present",(Mother=="Not.Present"|Father=="Not.Present"),Mother!=Father) %>% 
   left_join(cadidates) %>% filter(n>1) %>%  group_by(gene) %>% 
@@ -154,3 +154,64 @@ b<-byst$refSeq.siteType %>% str_split(pattern = ";") %>% base::unique()  %>%  ba
 
 table(a)
 table(b)
+
+
+
+
+
+
+output_pathogenic %>% inner_join(vep,by="key")
+
+
+vep$key<-paste(vep$chr,vep$pos)
+output_pathogenic$key<-paste(output_pathogenic$chr,output_pathogenic$pos)
+
+
+
+vep<-X2022_09_07_vep_family_18712
+
+
+
+
+
+
+
+
+
+merged_df$BIOTYPE %>% table()
+merged_df$Consequence %>%str_split("[&]") %>% unlist() %>%  table()
+annotation_46$refSeq.siteType %>% str_split("[|;]") %>% unlist() %>% table()
+annotation_46$refSeq.exonicAlleleFunction %>% str_split("[|;]") %>% unlist() %>% table()
+
+
+x<-unique(paste(merged_df$chr,merged_df$pos,sep = ":"))
+y<-unique(paste(annotation_46$chrom,annotation_46$pos,sep = ":")) 
+
+prop.table(table(x%in%y))
+prop.table(table(y%in%x))
+
+xx<-unique(paste(filtered_df$chr,filtered_df$pos,sep = ":"))
+yy<-unique(paste(pathogenic$chrom,pathogenic$pos,sep = ":")) 
+
+prop.table(table(xx%in%yy))
+prop.table(table(yy%in%xx))
+
+prop.table(table(xx%in%y))
+prop.table(table(yy%in%x))
+
+pathogenic$key<-paste(pathogenic$chrom,pathogenic$pos,sep = ":")
+merged_df$key<-paste(merged_df$chr,merged_df$pos,sep = ":")
+
+annotation_46$key<-paste(annotation_46$chrom,annotation_46$pos,sep = ":")
+
+zz<-annotation_46 %>% filter(allele_func==T,site_type==T) %>% select(key,refSeq.siteType,refSeq.exonicAlleleFunction,ref,alt) %>% inner_join(merged_df %>% select(key,BIOTYPE,Consequence,ref,alt))
+
+zzz<-zz %>% group_by(Consequence,BIOTYPE) %>% tally()
+
+filtered_df$key<-paste(filtered_df$chr,filtered_df$pos,sep = ":")
+
+z<-pathogenic %>% select(key,refSeq.siteType,refSeq.exonicAlleleFunction,ref,alt) %>% inner_join(merged_df %>% select(key,BIOTYPE,Consequence,ref,alt))
+
+zz<-merged_df %>% filter(key%in%yy) %>% anti_join(filtered_df,by="key")
+xxx<-pathogenic %>% filter(key%in%x) %>% anti_join(filtered_df,by="key")
+

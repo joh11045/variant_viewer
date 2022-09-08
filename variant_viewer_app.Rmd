@@ -9,6 +9,7 @@ runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
+#Current App for variant viewer, works with VEP annotation data
 knitr::opts_chunk$set(echo = FALSE)
 library(shiny)
 library(tidyverse)
@@ -42,7 +43,8 @@ vcf_file<-"~/ensembl-vep/inputs/newfam2.vcf"
 # x.1<-read.vcf(vcf_file)
 # x.2<-bed2vcf(x.1)
 #vep_table <- readRDS("~/Variant_viewer/vep_table.rds")
-vep_table<-read.csv("~/family_18712.csv")
+#vep_table<-read.csv("~/family_18712.csv")
+vep_table<-read.csv("~/2022-09-07_vep_family_18712.csv")
 bed<-vep_table %>% dplyr::select(chrom=chr,pos,ref,alt,Alleles,Proband,Mother,Father,Sibling) %>% mutate(start=as.numeric(pos)-1,end=as.numeric(pos)+nchar(alt)-1) %>% 
   dplyr::select(chrom, start,end,Proband,Mother,Father,Sibling)
 bed.father<-bed %>% filter(Father!="!")

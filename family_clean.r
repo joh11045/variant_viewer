@@ -1,3 +1,4 @@
+#Script to find variants for given pattern: multiple variants on a gene and with a pattern of missing in one parent and present in the other for each parent 
 final_table<-read.csv("family_18712.csv")
 denovos<-read.csv("family_18712_not_in_sibling.csv")
 

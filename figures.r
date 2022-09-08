@@ -1,3 +1,6 @@
+#Script for creating figure files for manuscript
+# copies main script for filtering each source and creates figures
+#==============================================================================
 # Load needed libraries
 pacman::p_unload(pacman::p_loaded(), character.only = TRUE)
 library(tidyverse)
@@ -207,20 +210,20 @@ p_2<-filtered_df %>% dplyr::select(PolyPhen.2) %>% filter(!is.na(PolyPhen.2)) %>
       x="PolyPhen",y="")
 
 #png(filename = "vep_scores.png",width = 800,height = 400)
-#cowplot::plot_grid(p_1,p_2,labels=c("D",""))
-#ggsave(filename = "vep_scores.png",width = 8,height = 4,units = "in")
+cowplot::plot_grid(p_1,p_2,labels=c("",""))
+ggsave(filename = "vep_scores.png",width = 8,height = 4,units = "in")
 #dev.off()
 
 #png(filename = "vep_image.png",width = 800,height = 1000)
-#cowplot::plot_grid(fig_a,fig_b,fig_c,nrow = 3,labels = "AUTO")
-#ggsave(filename = "vep_image.png",width = 8,height = 10,units = "in")
+cowplot::plot_grid(fig_a,fig_b,fig_c,nrow = 3,labels = "AUTO")
+ggsave(filename = "vep_image.png",width = 8,height = 10,units = "in")
 fig_a
 #ggsave(filename = "fig_a.png",width = 8,height = 10,units = "in")
 fig_b
 #ggsave(filename = "fig_b.png",width = 8,height = 10,units = "in")
 fig_c
 #ggsave(filename = "fig_c.png",width = 8,height = 10,units = "in")
-cowplot::plot_grid(p_1,p_2,labels=c("",""))
+#cowplot::plot_grid(p_1,p_2,labels=c("",""))
 #ggsave(filename = "fig_d.png",width = 8,height = 10,units = "in")
 
 #dev.off()
@@ -337,8 +340,8 @@ fig_f<-rbind(site_1,site_2) %>% group_by(Type,Site) %>% tally() %>%  mutate(shar
   coord_flip()
 
 #png(filename = "bystro_image.png",width = 800,height = 400)
-#cowplot::plot_grid(fig_f,fig_e,labels = c("E","F"),nrow = 2)
-#ggsave(filename = "bysto_image.png",width = 8,height = 6,units = "in")
+cowplot::plot_grid(fig_f,fig_e,labels = c("A","B"),nrow = 2)
+ggsave(filename = "bysto_image.png",width = 8,height = 6,units = "in")
 #dev.off()
 
 fig_e
@@ -348,64 +351,4 @@ fig_f
 
 rm(head_vcf,max_cadd_finder,max_phastCons_finder,max_phyloP_finder,site_type)
 rm(allele_func,clinvar_check,annotation_45)
-#-----------------------------------------------------------------------------
-filtered_df<-merged_df%>%
-  separate(PolyPhen,into = c("PolyPhen.1","PolyPhen.2"),sep = "[(]", remove = F) %>% 
-  mutate(PolyPhen.2=str_sub(PolyPhen.2,start = 1,-2)) %>% dplyr::select(-PolyPhen.1) %>% 
-  separate(SIFT,into = c("SIFT.1","SIFT.2"),sep = "[(]", remove = F) %>% 
-  mutate(SIFT.2=str_sub(SIFT.2,start = 1,-2)) %>% dplyr::select(-SIFT.1) %>% 
-  filter(as.numeric(gnomAD_AF)<0.001|is.na(gnomAD_AF),as.numeric(AF)<0.001|is.na(AF),as.numeric(MAX_AF)<0.05|is.na(MAX_AF)) %>%  
-  filter(as.numeric(QUAL)>20|is.na(QUAL)) %>% filter(as.numeric(SIFT.2<0.1)|is.na(SIFT)) %>% 
-  filter(as.numeric(PolyPhen.2>0.9)|is.na(PolyPhen)) %>% 
-  filter(!is.na(BIOTYPE),!is.na(Consequence)) %>%
-  filter(Consequence!="intergenic_variant") %>% 
-  #filter(!is.na(`1871274`)) %>% 
-  filter(!is.na(`2002145`)) %>%
-  #filter(!Consequence%in%c("downstream_gene_variant","upstream_gene_variant",
-  #                         "non_coding_transcript_exon_variant","non_coding_transcript_variant","intergenic_variant",
-  #                         "intron_variant","intron_variant&non_coding_transcript_variant","regulatory_region_variant",
-  #                         "intron_variant&NMD_transcript_variant")) %>%  
-  mutate_all(as.character)
-
-
-
-
-
-
-
-merged_df$BIOTYPE %>% table()
-merged_df$Consequence %>%str_split("[&]") %>% unlist() %>%  table()
-annotation_46$refSeq.siteType %>% str_split("[|;]") %>% unlist() %>% table()
-annotation_46$refSeq.exonicAlleleFunction %>% str_split("[|;]") %>% unlist() %>% table()
-
-
-x<-unique(paste(merged_df$chr,merged_df$pos,sep = ":"))
-y<-unique(paste(annotation_46$chrom,annotation_46$pos,sep = ":")) 
-
-prop.table(table(x%in%y))
-prop.table(table(y%in%x))
-
-xx<-unique(paste(filtered_df$chr,filtered_df$pos,sep = ":"))
-yy<-unique(paste(pathogenic$chrom,pathogenic$pos,sep = ":")) 
-
-prop.table(table(xx%in%yy))
-prop.table(table(yy%in%xx))
-
-prop.table(table(xx%in%y))
-prop.table(table(yy%in%x))
-
-pathogenic$key<-paste(pathogenic$chrom,pathogenic$pos,sep = ":")
-merged_df$key<-paste(merged_df$chr,merged_df$pos,sep = ":")
-
-annotation_46$key<-paste(annotation_46$chrom,annotation_46$pos,sep = ":")
-
-zz<-annotation_46 %>% filter(allele_func==T,site_type==T) %>% select(key,refSeq.siteType,refSeq.exonicAlleleFunction,ref,alt) %>% inner_join(merged_df %>% select(key,BIOTYPE,Consequence,ref,alt))
-
-zzz<-zz %>% group_by(Consequence,BIOTYPE) %>% tally()
-
-filtered_df$key<-paste(filtered_df$chr,filtered_df$pos,sep = ":")
-
-z<-pathogenic %>% select(key,refSeq.siteType,refSeq.exonicAlleleFunction,ref,alt) %>% inner_join(merged_df %>% select(key,BIOTYPE,Consequence,ref,alt))
-
-zz<-merged_df %>% filter(key%in%yy) %>% anti_join(filtered_df,by="key")
-xxx<-pathogenic %>% filter(key%in%x) %>% anti_join(filtered_df,by="key")
+ 

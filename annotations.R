@@ -1,16 +1,23 @@
+#script for cleaning and filtering bystro data
+#used for CTCF family; script copied for newfam with new version bystro_annontation_newfam2.R
+#===============================================================================
 pacman::p_unload(pacman::p_loaded(), character.only = TRUE)
-library(tidyverse)
-library(openxlsx)
-library(stringr)
-library(vcfR)
+library(tidyverse) #data cleaning
+library(openxlsx) # excel
+library(stringr) #string manipulation
+library(vcfR) #vcf handling 
 #READ in and first cleaning------------------------------------------------------
 annotation_45 <- read.delim("~/Documents/Yang Lab/research/exsomes/allfam.annotation.tsv", header=TRUE,stringsAsFactors = F) 
-# head_vcf<-read.vcfR("~/Documents/Yang Lab/research/allfam.vcf")
+#annotation_45<-read.delim("~/Documents/Yang Lab/research/exsomes/newfam2_vcf.annotation.tsv", header=TRUE,stringsAsFactors = F)
+
 head_vcf <- read.table("~/Documents/Yang Lab/research/allfam.vcf", quote="\"") %>% 
   dplyr::select(chrom=V1,vcfPos=V2,ID=V3,QUAL=V6,FILTER=V7,FORMAT=V8)
-#vcf_data_fields<-as.data.frame(head_vcf@fix) %>% rename(pos=POS,chrom=CHROM) %>% mutate(pos=as.numeric(pos))
-#vcf_data_fields_2<-as.data.frame(head_vcf@gt)
 
+# head_vcf <- read.table("~/ensembl-vep/inputs/newfam2.vcf", quote="\"") %>% 
+#   dplyr::select(chrom=V1,vcfPos=V2,ID=V3,QUAL=V6,FILTER=V7,FORMAT=V8)
+
+# Finder max values and determining variants where all transcripts are 
+# intergenic with no function
 
 max_cadd_finder<-str_split(annotation_45$cadd,"[;|]+")
 annotation_45$max_cadd<-as.numeric(sapply(max_cadd_finder, max))
@@ -20,11 +27,6 @@ annotation_45$max_phyloP<-as.numeric(sapply(max_phyloP_finder, max))
 
 max_phastCons_finder<-str_split(annotation_45$phastCons,"[;|]+")
 annotation_45$max_phastCons<-as.numeric(sapply(max_phastCons_finder, max))
-
-# allele_func<-str_split(annotation_45$refSeq.exonicAlleleFunction, "[;|]+")
-# annotation_45$allele_func<-sapply(allele_func, function(x){
-#   (all(unlist(x)=="synonymous")|all(unlist(x)=="!"))
-# }
 
 allele_func<-str_split(annotation_45$refSeq.exonicAlleleFunction, "[;|]+")
 annotation_45$allele_func<-sapply(allele_func, function(x){
@@ -42,9 +44,10 @@ annotation_45$clinvar.check<-sapply(clinvar_check, function(x){
 }) 
 annotation_46<-left_join(annotation_45,head_vcf,by=c("chrom","vcfPos"))
 #Filtering----------------------------------------------------------------------
+# filters based on allele frequency, quality, cadd, phylop, phastcons, allele function and site type
+# additionally, add any entry with a non-benign entry in clinvar
 pathogenic<-annotation_46 %>% filter(as.numeric(gnomad.genomes.af)<0.01|gnomad.genomes.af=="!") %>% 
   filter(as.numeric(QUAL)>20|is.na(QUAL)) %>% 
-  #filter(max_cadd>30|max_phastCons>=0.9|max_phyloP>=3) %>%
   filter(max_cadd>15|max_phastCons>=0.9|max_phyloP>=3) %>% 
   filter(!(allele_func==TRUE&site_type==TRUE)) %>% 
   filter(!grepl('2002145',missingGenos)) %>% 
@@ -155,58 +158,36 @@ output_pathogenic$alt<-ifelse(grepl("=",output_pathogenic$alt),as.character(past
                               as.character(output_pathogenic$alt))
 #CDNA-------------------------------------------------------------------------------
 
-allfam_vep <- read.table("~/ensembl-vep/outputs/allfam.tsv", header=T, quote="\"",stringsAsFactors = F) %>%
-   dplyr::select(Location,cDNA_position) %>%
-  separate(Location,into = c("chrom","chromStart"),sep = ":") %>% separate(chromStart,into=c("chromStart","chromEnd2"),sep="-") %>%
-  mutate(chromEnd=as.numeric(chromStart)+1) %>% select(chrom,chromStart,cDNA_position)
-allfam_vep2<-allfam_vep %>% filter(cDNA_position!="-") %>% group_by(chrom,chromStart) %>% 
-  mutate(subrank=rank(cDNA_position,ties.method ="random")) %>% spread(value=cDNA_position,key = subrank,fill = "") %>%  unite(col = "cDNA",sep = ",") %>%
-  separate(col="cDNA",into = c("chrom","chromStart","cDNA"),sep = ",",extra = "merge") %>% mutate(cDNA=str_remove_all(string = cDNA,pattern = ",,"))
-allfam_vep2$chromStart2<-as.numeric(allfam_vep2$chromStart)+1
-allfam_vep2$chromStart3<-as.numeric(allfam_vep2$chromStart)-1
-allfam_vep2$chromStart4<-as.numeric(allfam_vep2$chromStart)+2
-allfam_vep2$chromStart5<-as.numeric(allfam_vep2$chromStart)-2
-
-
-allfam_vep2<-allfam_vep2 %>% gather(-chrom,-cDNA,key="buffer",value = "chromStart") %>% select(-buffer)
-
-allfam_vep3<-allfam_vep2[(!duplicated(allfam_vep2[,c(1,3)])),]
-
-output_pathogenic<-left_join(output_pathogenic,allfam_vep3,by=c("chrom","chromStart"))
-
-output_pathogenic$cDNA<-ifelse(is.na(output_pathogenic$cDNA),"!",output_pathogenic$cDNA)
 
 #Final ordering and output-------------------------------------------------------
-
-col_order<-c("chrom","chromStart","chromEnd","ID","ref","alt","QUAL","cDNA","refSeq.refAminoAcid","refSeq.altAminoAcid","refSeq.codonNumber",
-             "gene","hgnc.gene.description","Mother","Father","Proband",
-             "pubmed_links","omim_link",
-             "phastCons","phyloP","cadd","gnomad.genomes.af","gnomad_links",
+output_pathogenic$chr=output_pathogenic$chrom
+output_pathogenic$pos=output_pathogenic$chromStart
+col_order<-c("chr","pos","ref","alt","QUAL","gene","Proband","Mother","Father","sibling",
+             "refSeq.refAminoAcid","refSeq.altAminoAcid","refSeq.codonNumber",
+             "phastCons","phyloP","cadd","gnomad.genomes.af",
              "refSeq.nearest.name",
-             "refSeq.siteType","refSeq.exonicAlleleFunction",
+             "refSeq.siteType","refSeq.exonicAlleleFunction", "hgnc.gene.description",
              "clinvar.alleleID","clinvar.clinicalSignificance","clinvar.type",
              "clinvar.phenotypeList","clinvar.numberSubmitters","clinvar.origin", 
              "clinvar.referenceAllele","clinvar.alternateAllele","clinvar.reviewStatus",        
              "refSeq.clinvar.clinicalSignificance","refSeq.clinvar.type","refSeq.clinvar.phenotypeList",                
-             "refSeq.clinvar.numberSubmitters","refSeq.clinvar.origin","refSeq.clinvar.reviewStatus","refSeq.description","HGMD_link","genecard_links","db_best_guess")
+             "refSeq.clinvar.numberSubmitters","refSeq.clinvar.origin","refSeq.clinvar.reviewStatus","refSeq.description","gnomad_links",
+             "pubmed_links","omim_link","HGMD_link","genecard_links","db_best_guess")
 output_pathogenic<-output_pathogenic[,col_order]
 output_pathogenic<-output_pathogenic %>% rename(clinvar.structure.phenotypeList=refSeq.clinvar.phenotypeList,
-                             clinvar.structure.clinicalSignificance=refSeq.clinvar.clinicalSignificance,
-                             clinvar.structure.type=refSeq.clinvar.type,                
-                             clinvar.structure.origin=refSeq.clinvar.origin,
-                             clinvar.structure.numberSubmitters=refSeq.clinvar.numberSubmitters,
-                             clinvar.structure.reviewStatus=refSeq.clinvar.reviewStatus)
+                                                clinvar.structure.clinicalSignificance=refSeq.clinvar.clinicalSignificance,
+                                                clinvar.structure.type=refSeq.clinvar.type,                
+                                                clinvar.structure.origin=refSeq.clinvar.origin,
+                                                clinvar.structure.numberSubmitters=refSeq.clinvar.numberSubmitters,
+                                                clinvar.structure.reviewStatus=refSeq.clinvar.reviewStatus)
 
+file_n<-paste(Sys.Date(),"bystro_family_2002.csv",sep = "_")
 
+output_pathogenic$alt<-str_replace(output_pathogenic$alt,"[+]","(+)")
+output_pathogenic$alt<-str_replace(output_pathogenic$alt,"[-]","(-)")
+output_pathogenic$alt<-str_replace(output_pathogenic$alt,"[=]","")
 
-write.table(output_pathogenic,"b_annotation.bed",sep = "\t",quote = F,row.names = F)
- 
-#write_csv(sorted,"pathogenic_variant_file.csv")                                                                                                       
-#----------------------------------------------------------------------------------
-
-
-sorted$oe<-ifelse(sorted$oe==".","!",sorted$oe)
-sorted$pLI<-ifelse(sorted$pLI==".","!",sorted$pLI) 
+write.csv(output_pathogenic,file = file_n,quote = F,row.names = F)
 
 
 
