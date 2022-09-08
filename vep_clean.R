@@ -1,16 +1,18 @@
+## Script for the filtering/cleaning of VEP annotation data
+## Set "file" variable to vcf annotation output file and individs for sample ids
+#===============================================================================
 # Load needed libraries
 pacman::p_unload(pacman::p_loaded(), character.only = TRUE)
-library(tidyverse)
-library(openxlsx)
-library(stringr)
-library(vcfR)
-library(ensemblVEP)
-library(VariantAnnotation)
+library(tidyverse) #data manipulation
+library(openxlsx) #excel
+library(stringr) #string manipulation
+library(vcfR) #VCF handling functions
+library(ensemblVEP) #functions for dealing with VEP output
+library(VariantAnnotation) #VCF handling functions
 #===============================================================================
-#Clean up annotation data-------------------------------------------------------
-
-#Read in data-------------------------------------------------------------------
-## set file to VEP output, current process uses output from the VEP command
+# #Read in data-------------------------------------------------------------------
+## Data is read in over 2 steps, one step to read in "CSQ" and one to read in genotype information
+## set file to VEP output, current process uses output from the following VEP command
 ## ensembl-vep/./vep -i INPUTFILE -o OUTPUTFILE --cache --vcf --everything --dir_cache CACHE DIR --offline
 
 #file<-"ensembl-vep/outputs/fa_allfam.vcf"
@@ -20,32 +22,30 @@ file<-"ensembl-vep/outputs/newfam2_anon.vcf"
 
 ## use functions from Variant Annotation Package to load VCF data in order to use
 ## functions from ensemblVEP package
-trial<-readVcf(file)
-trial.2<-parseCSQToGRanges(trial)
+vcf<-readVcf(file)
+vcf.2<-parseCSQToGRanges(vcf)
 
-## CSQ refers to ConSeQuence and is the annotated data
+## CSQ refers to ConSeQuence and is the annotated data, hard to get at without helper functions
 
-csq<-as.data.frame(cbind(trial.2@ranges@NAMES,trial.2@elementMetadata)) %>%  
-  separate(trial.2.ranges.NAMES,into = c("chr","temp"),sep = "[:]",extra = "merge") %>% 
+csq<-as.data.frame(cbind(vcf.2@ranges@NAMES,vcf.2@elementMetadata)) %>%  
+  separate(vcf.2.ranges.NAMES,into = c("chr","temp"),sep = "[:]",extra = "merge") %>% 
   separate(temp,into = c("pos","ref_alt"),sep = "[_]")
 
-rm(trial,trial.2)
+rm(vcf,vcf.2)
 
-#saveRDS(csq,"temp.rds")
-#csq<-readRDS("temp.rds")
 
 ## Read in the same VCF file again but to identify actual alleles at each location and QUAL
-allfam<-read.vcfR(file)
-x<-vcfR2tidy(allfam,toss_INFO_column = T)
+vcf.3<-read.vcfR(file)
+vcf.4<-vcfR2tidy(vcf.3,toss_INFO_column = T)
 
-head_vcf<-x$fix
-samps<-x$gt
+head_vcf<-vcf.4$fix
+samps<-vcf.4$gt
 
 ## ChromKey does not correspond to chrom number, just sub in chr and avoid
 chrom_cross<-head_vcf %>% group_by(ChromKey,chr=CHROM) %>% tally() %>% dplyr::select(-n)
 samps<-left_join(samps,chrom_cross)
 
-rm(x,allfam)
+rm(vcf.3,vcf.4)
 #Determine hetero/homozygosity--------------------------------------------------
 ## variable gt_GT list 0 for ref, 1 for alt, 1+n for each additional alt at location
 ## if allele is na; variant not present in individual
@@ -53,7 +53,7 @@ rm(x,allfam)
 ## if allele 1 = 0, then heterozygous, 
 ## if allele 1 dne 0 and dne allele 2 (rare); than individual has two variants at location
 ## current data is each individual per row, transform to one variant multiple individuals per row
-de_novo_finder<-samps %>% dplyr::select(chr,POS,Indiv,gt_GQ,gt_DP,gt_GT,gt_GT_alleles) %>% 
+status_finder<-samps %>% dplyr::select(chr,POS,Indiv,gt_GQ,gt_DP,gt_GT,gt_GT_alleles) %>% 
   separate(gt_GT,into = c("allele_1","allele_2"),sep = "/") %>%
   mutate(status=ifelse(is.na(allele_1),"No Variant",
                        ifelse(allele_1==allele_2,"Homozygous",
@@ -67,7 +67,7 @@ de_novo_finder<-samps %>% dplyr::select(chr,POS,Indiv,gt_GQ,gt_DP,gt_GT,gt_GT_al
 quals<-head_vcf %>% dplyr::select(chr=CHROM,pos=POS,ref=REF,alt=ALT,QUAL)
 
 #merge annotations, vcf header, and samples-------------------------------------
-temp_df<-de_novo_finder %>% dplyr::rename(pos=POS) %>% 
+temp_df<-status_finder %>% dplyr::rename(pos=POS) %>% 
   mutate(pos=as.character(pos)) %>% 
   left_join(csq,by=c("chr","pos")) %>% separate(ref_alt,c("ref","alt"),sep='[/]')
 
@@ -77,6 +77,8 @@ rm(head_vcf,csq,de_novo_finder,quals,samps,temp_df)
 #filter-------------------------------------------------------------------------
 ## isolate numbers from polyphen and sift columns
 ## filter based on SIFT polyPhen, allele frequency, QUALITY, BIOTYPE and Consequence
+## Consequence 130 categories, combinations of simpler categories and more damaging variants have more information
+##  ie "splice_polypyrimidine_tract_variant&intron_variant&NMD_transcript_variant"
 ## Note: some variants usually complicated insertions or deletions will have no associated quality
 
 filtered_df<-merged_df%>%
@@ -96,28 +98,11 @@ filtered_df<-merged_df%>%
                            "intron_variant&NMD_transcript_variant")) %>%
   mutate_all(as.character)
 
-# merged_df%>%separate(PolyPhen,into = c("PolyPhen.1","PolyPhen.2"),sep = "[(]", remove = F) %>% 
-#   mutate(PolyPhen.2=str_sub(PolyPhen.2,start = 1,-2)) %>% dplyr::select(-PolyPhen.1) %>% 
-#   separate(SIFT,into = c("SIFT.1","SIFT.2"),sep = "[(]", remove = F) %>% 
-#   mutate(SIFT.2=str_sub(SIFT.2,start = 1,-2)) %>% dplyr::select(-SIFT.1) %>% 
-#   filter(as.numeric(AF<0.01)|is.na(AF)) %>% 
-#   filter(as.numeric(QUAL)>20|is.na(QUAL)) %>% filter(as.numeric(SIFT.2<0.1)|is.na(SIFT)) %>% 
-#   filter(as.numeric(PolyPhen.2>0.9)|is.na(PolyPhen)) %>% 
-#   filter(!is.na(BIOTYPE),!is.na(Consequence)) %>%
-#   filter(!is.na(`2002145`)) %>% 
-#   filter(IMPACT!="LOW") %>%
-#   filter(Consequence!="downstream_gene_variant",Consequence!="upstream_gene_variant",
-#          Consequence!="non_coding_transcript_exon_variant",Consequence!="non_coding_transcript_variant",
-#          Consequence!="intron_variant&non_coding_transcript_variant",Consequence!="intron_variant",
-#          Consequence!="3_prime_UTR_variant",Consequence!="5_prime_UTR_variant",
-#          Consequence!="intron_variant&NMD_transcript_variant")->y
-# %>%
-# merged_df %>%   group_by(Consequence,BIOTYPE,IMPACT) %>% tally()->x
-
 filtered_df[is.na(filtered_df)]<-"!"
 
-#Simplify table to single row variant with multiple effects from each effect having
-#its own row--------------------------------------------------------------------
+#Simplify table to single row per variant
+#Complicated step to paste row information into corresponding cells for variants with multiple transcipts
+#--------------------------------------------------------------------
 frame_1<-filtered_df[!duplicated(filtered_df[,c("chr","pos","ref","alt")]),]
 frame_2<-filtered_df[duplicated(filtered_df[,c("chr","pos","ref","alt")]),]
 
@@ -136,6 +121,7 @@ for(i in 1:nrow(frame_1)){
 frame_1<-frame_1 %>% filter(!(`1871274`=="Homozygous"&`1871284`=="!"&`1871286`=="!"&`1871292`=="!"))
 rm(chrom_cross,filtered_df,frame_2,merged_df,i,j,k)
 # Create links------------------------------------------------------------------
+# outside info brought in for OMIM data
 db_snp<-word(frame_1$Existing_variation,1,sep="&")
 OMIM<-read.delim("~/Documents/Yang Lab/research/mim2gene.txt", header=FALSE, comment.char="#", stringsAsFactors=FALSE) 
 names(OMIM)<-c("MIM_Number","MIM_Entry Type", "Entrez_Gene_ID", "Approved_Gene_Symbol", "Ensemble_Gene_ID")
@@ -168,16 +154,12 @@ final_table$alt<-str_replace(final_table$alt,"[+]","(+)")
 final_table$alt<-str_replace(final_table$alt,"[-]","(-)")
 final_table$alt<-str_replace(final_table$alt,"[=]","")
 
-#denovos<-final_table %>% filter((Proband=="Homozygous"&Sibling=="Heterozygous")|(Proband=="Heterozygous"&Sibling=="!"))
-#saveRDS(final_table,"Variant_viewer/vep_table.rds")
-
-#x<-read_rds("Variant_viewer/vep_table.rds")
-#x[1,] %>% gather(value,variable) %>% write.csv("Variant_viewer/vep_data_dict.csv",row.names = F)
-
-#
+# Get positions for variants if reannotation is needed
+#------------------------------------------------------------------------------
 #frame_1 %>% dplyr::select(chr,pos) -> x
 
 #write_tsv(x,file = "ft_newfam_positions.txt")
+
 file_n<-paste(Sys.Date(),"vep_family_18712.csv",sep = "_")
 
 write.csv(final_table,file = file_n,quote = F,row.names = F)
